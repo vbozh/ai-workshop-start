@@ -30,6 +30,7 @@ A skill an agent loads while it works in the repository:
 
 ## Local web view
 - Start with `npm run web`; serve the page on `http://127.0.0.1:4173` (or `PORT`)
+- `HOST` selects the bind address; use `HOST=0.0.0.0` when the workspace needs to forward the port
 - Accept a GitHub repository URL, optionally pinned to `/tree/<commit>`
 - Show repository name, number of skills, warnings, and skills sorted by name then path
 - For every skill, show its name, description, path, and copy locations

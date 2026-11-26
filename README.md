@@ -16,7 +16,8 @@ build-tools-bump-gradle-api — Bumps the Gradle API version that Kotlin Gradle 
 Set `GITHUB_TOKEN` for a higher GitHub rate limit. `npm test` runs the tests.
 
 Start the local web view with `npm run web`, then open <http://127.0.0.1:4173>. Set `PORT` to
-change the port. The page accepts a GitHub repository URL or a URL pinned to a commit.
+change the port. In a forwarded workspace, bind to all interfaces with `HOST=0.0.0.0 npm run web`.
+The page accepts a GitHub repository URL or a URL pinned to a commit.
 
 - [spec/](spec/): what it does. [AGENTS.md](AGENTS.md): the definition of done.
 - [fixture/](fixture/README.md): a small repository for the tests.

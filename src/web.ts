@@ -72,10 +72,12 @@ function json(response: import('node:http').ServerResponse, status: number, body
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const port = Number(process.env.PORT ?? 4173);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('PORT must be between 0 and 65535');
+  const host = process.env.HOST ?? '127.0.0.1';
   const server = createWebServer({ token: process.env.GITHUB_TOKEN || undefined });
-  server.listen(port, '127.0.0.1', () => {
+  server.listen(port, host, () => {
     const address = server.address();
     const actualPort = typeof address === 'object' && address ? address.port : port;
-    console.log(`Skill Atlas web view: http://127.0.0.1:${actualPort}`);
+    const displayHost = host === '0.0.0.0' ? '127.0.0.1' : host;
+    console.log(`Skill Atlas web view: http://${displayHost}:${actualPort}`);
   });
 }
