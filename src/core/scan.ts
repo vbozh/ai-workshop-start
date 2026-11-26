@@ -30,13 +30,15 @@ export async function scan(source: Source): Promise<ScanResult> {
 async function readSkill(source: Source, file: SkillFile): Promise<{ skill?: Skill; warning?: string }> {
   const bytes = await source.read(file.path);
   if (!bytes) return { warning: `${file.path}: listed, but not found at the scanned commit; skipped` };
-  const parsed = parseSkill(new TextDecoder().decode(bytes));
+  const content = new TextDecoder().decode(bytes);
+  const parsed = parseSkill(content);
   const skill: Skill = {
     id: `${source.repository.id}:${file.path}`,
     repository: source.repository.id,
     path: file.path,
     name: parsed.name ?? file.name,
     description: parsed.description,
+    content,
     commit: source.repository.commit,
     copies: file.copies,
   };

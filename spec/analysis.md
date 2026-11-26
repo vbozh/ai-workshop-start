@@ -5,7 +5,7 @@ A **GitHub repository** URL, at its default branch or at `/tree/<commit>`; or a 
 Every **project skill**: **name**, **description**, **link**
 ## Architecture
 Core: fetch → find → parse. CLI: a *thin client*.
-Skill: id = `repo:path`, name, description, commit, copies
+Skill: id = `repo:path`, name, description, SKILL.md content, commit, copies
 ## Project skill
 A skill an agent loads while it works in the repository:
 `<project>/<agent folder>/skills/<skill>/SKILL.md`
@@ -27,3 +27,12 @@ A skill an agent loads while it works in the repository:
 - The link pins the *scanned commit*
 - No front matter, or malformed → a *warning*, the scan goes on
 - Unreachable repository, or unknown commit → a clear message, exit code 1
+
+## Local web view
+- Start with `npm run web`; serve the page on `http://127.0.0.1:4173` (or `PORT`)
+- Accept a GitHub repository URL, optionally pinned to `/tree/<commit>`
+- Show repository name, number of skills, warnings, and skills sorted by name then path
+- For every skill, show its name, description, path, and copy locations
+- Selecting a skill shows its complete `SKILL.md` text and a link pinned to the scanned commit
+- Invalid URLs and scan failures are shown in the page; nothing is stored
+- `GITHUB_TOKEN` is optional and used by the local server to raise the GitHub API rate limit

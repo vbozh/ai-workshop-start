@@ -18,6 +18,8 @@ export type Skill = {
   path: string;
   name: string;
   description: string;
+  /** The exact SKILL.md text read at the scanned commit. */
+  content: string;
   /** The scanned commit, the one the link pins; empty for a local directory. */
   commit: string;
   /** The paths of the same skill directory in other agents' folders of its project; not read. */
