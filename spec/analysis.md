@@ -1,6 +1,6 @@
 # Repository analysis
 ## Input
-A **GitHub repository** URL, or a local directory
+A **GitHub repository** URL, at its default branch or at `/tree/<commit>`; or a local directory
 ## Output
 Every **project skill**: **name**, **description**, **link**
 ## Architecture
@@ -21,8 +21,9 @@ A skill an agent loads while it works in the repository:
 - **Symbolic links** are not followed: a skill reached only through a link is not listed
 ## Details
 - **GitHub API**, no clone; *under 5 s* for intellij-community
-- Without `GITHUB_TOKEN`, a tree too large for one answer → the root project's skills only, and a *warning*
+- At a given commit: through *its tree*, even with `GITHUB_TOKEN`, since code search sees only the default branch
+- Through the tree, one too large for one answer → the root project's skills only, and a *warning*
 - The name: front matter, else the directory
 - The link pins the *scanned commit*
 - No front matter, or malformed → a *warning*, the scan goes on
-- Unreachable repository → a clear message, exit code 1
+- Unreachable repository, or unknown commit → a clear message, exit code 1

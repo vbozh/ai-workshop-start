@@ -186,3 +186,50 @@ test('rate limit → a message that asks for GITHUB_TOKEN', async () => {
     message: 'GitHub rate limit reached; set GITHUB_TOKEN',
   });
 });
+
+test('a GitHub URL with tree/<commit> → the skills at that commit, from its tree even with GITHUB_TOKEN', async () => {
+  const commit = '1111111111111111111111111111111111111111';
+  const api = 'https://api.github.com/repos/JetBrains/example';
+  // No code search answer: code search sees only the default branch, so the scan must not use it.
+  const pinned = replay({
+    [api]: { status: 200, body: { full_name: 'JetBrains/example', default_branch: 'main' } },
+    [`${api}/commits/${commit}`]: { status: 200, body: { sha: commit } },
+    [`${api}/git/trees/${commit}?recursive=1`]: {
+      status: 200,
+      body: {
+        truncated: false,
+        tree: [
+          { path: '.agents/skills/commits/SKILL.md', mode: '100644', type: 'blob', sha: 'a' },
+          { path: 'src/test/resources/skills/weather/SKILL.md', mode: '100644', type: 'blob', sha: 'b' },
+        ],
+      },
+    },
+    [`https://raw.githubusercontent.com/JetBrains/example/${commit}/.agents/skills/commits/SKILL.md`]: {
+      status: 200,
+      body: '---\nname: commits\ndescription: Write commit messages as of that commit.\n---\n',
+    },
+  });
+  const scanned = await atlas(['scan', `https://github.com/JetBrains/example/tree/${commit}`], { fetch: pinned, token: 'test' });
+  assert.equal(scanned.code, 0, scanned.stderr);
+  assert.equal(
+    scanned.stdout,
+    [
+      'JetBrains/example · 1 skill',
+      'commits — Write commit messages as of that commit.',
+      `  https://github.com/JetBrains/example/blob/${commit}/.agents/skills/commits/SKILL.md`,
+    ].join('\n'),
+  );
+  assert.equal(scanned.stderr, '');
+});
+
+test('unknown commit → a clear message, exit code 1', async () => {
+  const api = 'https://api.github.com/repos/JetBrains/example';
+  // What GitHub answers for a commit it does not know.
+  const unknown = replay({
+    [api]: { status: 200, body: { full_name: 'JetBrains/example', default_branch: 'main' } },
+    [`${api}/commits/no-such-commit`]: { status: 422, body: { message: 'No commit found for SHA: no-such-commit' } },
+  });
+  const scanned = await atlas(['scan', 'github.com/JetBrains/example/tree/no-such-commit'], { fetch: unknown });
+  assert.equal(scanned.code, 1);
+  assert.equal(scanned.stderr, 'Commit not found: no-such-commit in https://github.com/JetBrains/example');
+});

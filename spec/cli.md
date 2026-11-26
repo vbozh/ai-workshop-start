@@ -1,5 +1,5 @@
 # Command line
-`./skill-atlas scan <GitHub URL | directory>`
+`./skill-atlas scan <GitHub URL | directory>`; a GitHub URL may pin a commit: `github.com/<owner>/<repo>/tree/<commit>`
 Prints the result **at once**; *nothing is stored*.
 `GITHUB_TOKEN`, optional: a higher GitHub rate limit.
 ## Output
