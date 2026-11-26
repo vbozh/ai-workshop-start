@@ -1,9 +1,8 @@
 // The decisions in spec/analysis.md and spec/cli.md, checked on what the real command prints for
-// ./fixture and for a small GitHub repository answered in tests/helpers.ts. The edge cases of
-// where skills live are yours to add.
+// ./fixture and for small GitHub repositories answered in tests/helpers.ts and below.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -15,6 +14,7 @@ import { atlas, CLI, EXAMPLE_COMMIT, FIXTURE } from './helpers.ts';
 
 const fixture = await atlas(['scan', FIXTURE]);
 const example = await atlas(['scan', 'github.com/JetBrains/example']);
+const root = pathToFileURL(FIXTURE).href;
 
 test('malformed front matter → the directory name, no description and a warning', () => {
   const parsed = parseSkill(readFileSync(join(FIXTURE, '.agents/skills/release-checklist/SKILL.md'), 'utf8'));
@@ -26,7 +26,7 @@ test('malformed front matter → the directory name, no description and a warnin
   );
 });
 
-test('scan prints the repository, then each skill with its first sentence and pinned link', () => {
+test('scan prints the repository, then each skill with its first sentence, pinned link and unread copies', () => {
   assert.equal(example.code, 0, example.stderr);
   assert.equal(
     example.stdout,
@@ -34,26 +34,120 @@ test('scan prints the repository, then each skill with its first sentence and pi
       'JetBrains/example · 1 skill',
       'commits — Write commit messages the way this repository does.',
       `  https://github.com/JetBrains/example/blob/${EXAMPLE_COMMIT}/.claude/skills/commits/SKILL.md`,
+      '  also in .github/skills/commits/SKILL.md',
     ].join('\n'),
   );
 });
 
-test('./fixture: every skill, sorted by name, linked to its file, with a warning for the malformed one', () => {
-  const root = pathToFileURL(FIXTURE).href;
+test('./fixture: every project skill, sorted by name, linked to its file, with a warning for the malformed one', () => {
   assert.equal(fixture.code, 0);
   assert.equal(
     fixture.stdout,
     [
-      'fixture · 3 skills',
+      'fixture · 5 skills',
       "code-style — Follow the project's code style.",
       `  ${root}/.github/skills/code-style/SKILL.md`,
       'commits — Write commit messages the way this repository does.',
       `  ${root}/.claude/skills/commits/SKILL.md`,
+      '  also in .cursor/skills/commits/SKILL.md',
+      'commits — Write commit messages for the web app.',
+      `  ${root}/web/.claude/skills/commits/SKILL.md`,
+      'debugging',
+      `  ${root}/.junie/skills/debugging/SKILL.md`,
       'release-checklist',
       `  ${root}/.agents/skills/release-checklist/SKILL.md`,
     ].join('\n'),
   );
   assert.match(fixture.stderr, /^warning: \.agents\/skills\/release-checklist\/SKILL\.md: malformed front matter: /);
+});
+
+test('no front matter → the directory name, no description and a warning', () => {
+  assert.match(fixture.stdout, new RegExp(`^debugging\n  ${root}/\\.junie/skills/debugging/SKILL\\.md$`, 'm'));
+  assert.match(fixture.stderr, /^warning: \.junie\/skills\/debugging\/SKILL\.md: no front matter; using the directory name$/m);
+});
+
+test("a skill copied into another agent's folder of its project → one skill at the first path, the copy under also in", () => {
+  const copy = readFileSync(join(FIXTURE, '.cursor/skills/commits/SKILL.md'), 'utf8');
+  assert.notEqual(copy, readFileSync(join(FIXTURE, '.claude/skills/commits/SKILL.md'), 'utf8'), 'the copy is generated: its text differs');
+  const lines = fixture.stdout.split('\n');
+  const at = lines.indexOf(`  ${root}/.claude/skills/commits/SKILL.md`);
+  assert.deepEqual(lines.slice(at - 1, at + 2), [
+    'commits — Write commit messages the way this repository does.',
+    `  ${root}/.claude/skills/commits/SKILL.md`,
+    '  also in .cursor/skills/commits/SKILL.md',
+  ]);
+  assert.equal(fixture.stdout.split('.cursor/').length - 1, 1, 'the copy is listed once, as a copy');
+});
+
+test("a subproject's skill is a skill of its own, not a copy of the root project's skill of the same name", () => {
+  const lines = fixture.stdout.split('\n');
+  const at = lines.indexOf(`  ${root}/web/.claude/skills/commits/SKILL.md`);
+  assert.deepEqual(lines.slice(at - 1, at + 2), [
+    'commits — Write commit messages for the web app.',
+    `  ${root}/web/.claude/skills/commits/SKILL.md`,
+    'debugging',
+  ]);
+  assert.doesNotMatch(fixture.stdout, /also in .*web\//);
+});
+
+test('a SKILL.md outside an agent skills folder, not directly in a skill directory, or named skill.md is not a project skill', () => {
+  const notSkills = [
+    'SKILL.md',
+    'skills/pdf/SKILL.md',
+    '.claude/skills/SKILL.md',
+    '.claude/skills/commits/examples/SKILL.md',
+    '.claude/skills/review/skill.md',
+  ];
+  assert.deepEqual(notSkills.filter((path) => !existsSync(join(FIXTURE, path))), [], 'the fixture has each of them');
+  const listed = (path: string) => fixture.stdout.includes(`${root}/${path}`) || fixture.stdout.includes(` ${path}`);
+  assert.deepEqual(notSkills.filter(listed), []);
+});
+
+test('a symbolic link to a skills folder is not followed', () => {
+  assert.ok(lstatSync(join(FIXTURE, '.gemini/skills')).isSymbolicLink(), 'the fixture links .gemini/skills to .agents/skills');
+  assert.doesNotMatch(`${fixture.stdout}\n${fixture.stderr}`, /\.gemini/);
+});
+
+test("without GITHUB_TOKEN, a tree too large for one answer → the root project's skills only, and a warning", async () => {
+  const api = 'https://api.github.com/repos/JetBrains/huge';
+  const tree = (entries: { path: string; type: string; sha: string }[]) => ({
+    status: 200,
+    body: { truncated: false, tree: entries.map((entry) => ({ mode: entry.type === 'tree' ? '040000' : '100644', ...entry })) },
+  });
+  // What GitHub answers, without a token, for a repository with skills in .claude/skills and in web/.
+  // web/ is not answered: the scan must not look there.
+  const huge = replay({
+    [api]: { status: 200, body: { full_name: 'JetBrains/huge', default_branch: 'master' } },
+    [`${api}/commits/master`]: { status: 200, body: { sha: EXAMPLE_COMMIT } },
+    [`${api}/git/trees/${EXAMPLE_COMMIT}?recursive=1`]: { status: 200, body: { truncated: true, tree: [] } },
+    [`${api}/git/trees/${EXAMPLE_COMMIT}`]: tree([
+      { path: '.claude', type: 'tree', sha: 'claude' },
+      { path: 'web', type: 'tree', sha: 'web' },
+    ]),
+    [`${api}/git/trees/claude`]: tree([{ path: 'skills', type: 'tree', sha: 'claude-skills' }]),
+    [`${api}/git/trees/claude-skills?recursive=1`]: tree([
+      { path: 'commits', type: 'tree', sha: 'commits' },
+      { path: 'commits/SKILL.md', type: 'blob', sha: 'commits-skill' },
+    ]),
+    [`https://raw.githubusercontent.com/JetBrains/huge/${EXAMPLE_COMMIT}/.claude/skills/commits/SKILL.md`]: {
+      status: 200,
+      body: '---\nname: commits\ndescription: Write commit messages.\n---\n',
+    },
+  });
+  const scanned = await atlas(['scan', 'https://github.com/JetBrains/huge'], { fetch: huge });
+  assert.equal(scanned.code, 0, scanned.stderr);
+  assert.equal(
+    scanned.stdout,
+    [
+      'JetBrains/huge · 1 skill',
+      'commits — Write commit messages.',
+      `  https://github.com/JetBrains/huge/blob/${EXAMPLE_COMMIT}/.claude/skills/commits/SKILL.md`,
+    ].join('\n'),
+  );
+  assert.equal(
+    scanned.stderr,
+    "warning: the tree is too large to list at once; looked only at the root project's skills (GITHUB_TOKEN finds subprojects' too)",
+  );
 });
 
 test('the CLI prints the result at once and stores nothing', (t) => {
